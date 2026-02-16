@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Aaron's First Steps (v5.5 - Mobile Fix)</title>
+    <title>Aaron's First Steps (v5.6 - Record System)</title>
     <style>
         body {
             margin: 0; padding: 0; overflow: hidden;
@@ -47,21 +47,24 @@
         
         /* Botões otimizados para toque */
         button {
-            border: none; padding: 15px 40px;
-            font-size: 20px; font-weight: bold; color: white;
+            border: none; padding: 12px 40px;
+            font-size: 18px; font-weight: bold; color: white;
             border-radius: 50px; cursor: pointer;
             box-shadow: 0 4px 0 rgba(0,0,0,0.2);
             transition: transform 0.1s; font-family: inherit;
             min-width: 220px;
             touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            line-height: 1.2;
         }
+        button span { font-size: 12px; opacity: 0.9; font-weight: normal; margin-top: 2px; }
         button:active { transform: translateY(4px); box-shadow: none; }
 
-        .btn-easy { background: #81d4fa; }   
-        .btn-normal { background: #ffb74d; } 
-        .btn-hard { background: #e57373; }   
-
+        .btn-easy { background: #81d4fa; }
+        .btn-normal { background: #ffb74d; }
+        .btn-hard { background: #e57373; }
+        
         .hidden { display: none !important; }
 
         #mobile-controls {
@@ -78,6 +81,19 @@
             display: flex; align-items: center; justify-content: center;
             border: 3px solid #ccc;
         }
+
+        /* Estilos novos para o Game Over */
+        .level-info {
+            font-size: 18px; color: #888; margin: 5px 0;
+            background: #eee; padding: 5px 15px; border-radius: 15px;
+        }
+        .record-info {
+            font-size: 20px; color: #E91E63; font-weight: bold; margin-bottom: 20px;
+        }
+        .new-record-anim {
+            animation: pulse 1s infinite; color: #ff9800;
+        }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
     </style>
 </head>
 <body>
@@ -98,22 +114,35 @@
         </div>
     </div>
 
-    <!-- REMOVIDO ontouchend PARA EVITAR DUPLO DISPARO -->
+    <!-- START SCREEN -->
     <div id="start-screen">
         <h1 style="color:#81d4fa; font-size: 40px; margin: 0;">Aaron's First Steps</h1>
         <img id="menu-avatar" style="width:100px; height:100px; margin: 10px;">
         <p style="color:#666; font-size: 16px;">Escolha a dificuldade:</p>
         
         <div class="btn-group">
-            <button class="btn-easy" onclick="startGame('easy')">Fácil</button>
-            <button class="btn-normal" onclick="startGame('normal')">Normal</button>
-            <button class="btn-hard" onclick="startGame('hard')">Difícil</button>
+            <button class="btn-easy" onclick="startGame('easy')">
+                Fácil <span id="rec-easy">Rec: 0m</span>
+            </button>
+            <button class="btn-normal" onclick="startGame('normal')">
+                Normal <span id="rec-normal">Rec: 0m</span>
+            </button>
+            <button class="btn-hard" onclick="startGame('hard')">
+                Difícil <span id="rec-hard">Rec: 0m</span>
+            </button>
         </div>
     </div>
 
+    <!-- GAME OVER SCREEN -->
     <div id="game-over-screen" class="hidden">
         <h1 style="color:#555;" id="game-over-title">Caiu!</h1>
-        <p id="final-score" style="font-size: 28px; font-weight:bold; color: #5d5d5d;">0 metros</p>
+        
+        <div id="level-display" class="level-info">Nível: Normal</div>
+        
+        <p id="final-score" style="font-size: 32px; font-weight:bold; color: #5d5d5d; margin: 10px 0;">0 metros</p>
+        
+        <div id="high-score-display" class="record-info">Recorde: 0m</div>
+
         <button class="btn-easy" onclick="location.reload()">Voltar ao Menu</button>
     </div>
 
@@ -121,31 +150,20 @@
 
 <script>
 /**
- * AARON'S FIRST STEPS - VERSÃO V5.5 (MOBILE FIX)
- * - Correção crítica de input touch (multitoque).
- * - Correção de botões disparando duas vezes.
- * - Suas configurações de dificuldade Hard mantidas.
+ * AARON'S FIRST STEPS - VERSÃO V5.6 (COM SISTEMA DE RECORDES)
  */
 
 // --- 1. CONFIGURAÇÕES ---
 const LEVELS = {
-    easy: {
-        lives: 3, spawnTime: 3.0, correction: 1.5, fallForce: 0.015, magnetTime: 2.0      
-    },
-    normal: {
-        lives: 3, spawnTime: 2.3, correction: 1.5, fallForce: 0.03, magnetTime: 0.5       
-    },
-    hard: { // SUAS CONFIGURAÇÕES MANTIDAS
-        lives: 1, 
-        spawnTime: 1.0,       
-        correction: 1.5, 
-        fallForce: 0.06,     
-        magnetTime: 0.1       
-    }
+    easy: { lives: 3, spawnTime: 3.0, correction: 1.5, fallForce: 0.015, magnetTime: 2.0 },
+    normal: { lives: 3, spawnTime: 2.3, correction: 1.5, fallForce: 0.03, magnetTime: 0.5 },
+    hard: { lives: 1, spawnTime: 1.0, correction: 1.5, fallForce: 0.06, magnetTime: 0.1 }
 };
 
-let CURRENT_LEVEL = LEVELS.easy; 
-let gameRunning = false; 
+let CURRENT_LEVEL = LEVELS.easy;
+let CURRENT_LEVEL_NAME = 'easy'; // Variável para rastrear o nome da dificuldade
+
+let gameRunning = false;
 let lastTime = 0; 
 
 const STATE = {
@@ -155,9 +173,27 @@ const STATE = {
     angle: 0, 
     forceDirection: 1, 
     stabilityTimer: 0, 
-    spawnTimer: 0,     
+    spawnTimer: 0, 
     isInvincible: false
 };
+
+// --- SISTEMA DE RECORDE ---
+function getRecord(diff) {
+    return parseInt(localStorage.getItem('aaron_record_' + diff) || "0");
+}
+
+function saveRecord(diff, score) {
+    localStorage.setItem('aaron_record_' + diff, score);
+}
+
+function updateMenuRecords() {
+    document.getElementById('rec-easy').innerText = `Rec: ${getRecord('easy')}m`;
+    document.getElementById('rec-normal').innerText = `Rec: ${getRecord('normal')}m`;
+    document.getElementById('rec-hard').innerText = `Rec: ${getRecord('hard')}m`;
+}
+
+// Inicializa os textos dos botões ao carregar
+updateMenuRecords();
 
 // --- 2. SPRITES VETORIAIS ---
 const SVG_SPRITES = {
@@ -178,25 +214,21 @@ document.getElementById('life1').src = SVG_SPRITES.heart;
 document.getElementById('life2').src = SVG_SPRITES.heart;
 document.getElementById('life3').src = SVG_SPRITES.heart;
 
-// --- 3. ÁUDIO SEGURO ---
+// --- 3. ÁUDIO ---
 const AudioSys = {
     ctx: null,
     init: function() { 
         try {
             const AC = window.AudioContext || window.webkitAudioContext;
-            if (AC) {
-                this.ctx = new AC();
-            }
+            if (AC) { this.ctx = new AC(); }
         } catch(e) {}
     },
     resume: function() {
-        if (this.ctx && this.ctx.state === 'suspended') {
-            this.ctx.resume();
-        }
+        if (this.ctx && this.ctx.state === 'suspended') { this.ctx.resume(); }
     },
     play: function(freq, type) {
         if (!this.ctx) return;
-        this.resume(); // Tenta retomar sempre que tocar
+        this.resume();
         try {
             const o = this.ctx.createOscillator(); const g = this.ctx.createGain();
             o.type = type; o.frequency.value = freq;
@@ -222,7 +254,7 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// TECLADO (PC)
+// TECLADO
 const setKeyInput = (k, v) => {
     if (k === 'ArrowLeft' || k === 'a') input.left = v;
     if (k === 'ArrowRight' || k === 'd') input.right = v;
@@ -230,35 +262,23 @@ const setKeyInput = (k, v) => {
 window.addEventListener('keydown', e => setKeyInput(e.key, true));
 window.addEventListener('keyup', e => setKeyInput(e.key, false));
 
-// TOQUE (MOBILE - CORRIGIDO)
-// Função para processar todos os toques ativos
+// TOQUE
 const handleTouch = (e) => {
     if (!gameRunning) return;
-    e.preventDefault(); // Impede zoom e scroll
-
-    // Reinicia inputs
-    input.left = false;
-    input.right = false;
-
-    // Verifica todos os dedos na tela
+    e.preventDefault();
+    input.left = false; input.right = false;
     for (let i = 0; i < e.touches.length; i++) {
         let t = e.touches[i];
-        if (t.clientX < window.innerWidth / 2) {
-            input.left = true;
-        } else {
-            input.right = true;
-        }
+        if (t.clientX < window.innerWidth / 2) { input.left = true; } 
+        else { input.right = true; }
     }
-    
-    // Tenta destravar áudio no mobile
     AudioSys.resume();
 };
-
 canvas.addEventListener('touchstart', handleTouch, {passive: false});
-canvas.addEventListener('touchmove', handleTouch, {passive: false}); // Permite arrastar dedo
+canvas.addEventListener('touchmove', handleTouch, {passive: false});
 canvas.addEventListener('touchend', handleTouch);
 
-// --- LÓGICA DE FÍSICA E DELTA TIME ---
+// --- LÓGICA ---
 function updatePhysics(dtFactor, dtSeconds) {
     let correction = 0;
     
@@ -350,7 +370,8 @@ function draw() {
     ctx.fillStyle = "#e6e0d0"; ctx.fillRect(pathMargin, 0, canvas.width - pathMargin * 2, canvas.height);
 
     ctx.strokeStyle = "white"; ctx.lineWidth = 4;
-    ctx.setLineDash([40, 60]); ctx.lineDashOffset = -(performance.now() / 1000) * 180; 
+    ctx.setLineDash([40, 60]); ctx.lineDashOffset = -(performance.now() / 1000) * 180;
+
     ctx.beginPath(); ctx.moveTo(canvas.width/2, 0); ctx.lineTo(canvas.width/2, canvas.height); ctx.stroke();
 
     obstacles.forEach(o => {
@@ -383,11 +404,9 @@ let anim;
 
 function loop(timestamp) {
     if (!gameRunning) return;
-
     if (!lastTime) lastTime = timestamp;
     const deltaTime = timestamp - lastTime;
     lastTime = timestamp;
-
     const dtSeconds = Math.min(deltaTime / 1000, 0.1); 
 
     update(dtSeconds);
@@ -397,9 +416,8 @@ function loop(timestamp) {
 }
 
 function startGame(difficulty) {
-    if (gameRunning) return; 
+    if (gameRunning) return;
     
-    // Inicia áudio na ação do usuário (Click)
     AudioSys.init(); 
     AudioSys.resume();
 
@@ -408,6 +426,8 @@ function startGame(difficulty) {
     document.getElementById('ui-layer').classList.remove('hidden');
     
     CURRENT_LEVEL = LEVELS[difficulty];
+    CURRENT_LEVEL_NAME = difficulty; // Armazena a dificuldade atual
+
     STATE.lives = CURRENT_LEVEL.lives;
     STATE.score = 0; 
     STATE.angle = 0; 
@@ -420,20 +440,45 @@ function startGame(difficulty) {
     input.right = false;
     
     updateLivesUI();
-    STATE.isPlaying = true; 
-    gameRunning = true;
-    lastTime = 0; 
+    document.getElementById('score').innerText = "0";
     
+    gameRunning = true;
+    lastTime = 0;  
     requestAnimationFrame(loop);
 }
 
 function gameOver(reason) {
-    STATE.isPlaying = false; 
     gameRunning = false;
     cancelAnimationFrame(anim);
     AudioSys.play(100, 'square');
-    document.getElementById('final-score').innerText = STATE.score + " metros";
+
+    // --- LÓGICA DE RECORDE ---
+    const oldRecord = getRecord(CURRENT_LEVEL_NAME);
+    let isNewRecord = false;
+    
+    if (STATE.score > oldRecord) {
+        saveRecord(CURRENT_LEVEL_NAME, STATE.score);
+        isNewRecord = true;
+        updateMenuRecords(); // Atualiza os botões do menu para a próxima vez
+    }
+
+    // Traduções para exibição
+    const diffNames = { 'easy': 'Fácil', 'normal': 'Normal', 'hard': 'Difícil' };
+    
+    // Atualiza a tela de Game Over
     document.getElementById('game-over-title').innerText = reason;
+    document.getElementById('level-display').innerText = "Nível: " + diffNames[CURRENT_LEVEL_NAME];
+    document.getElementById('final-score').innerText = STATE.score + " metros";
+
+    const recordDisplay = document.getElementById('high-score-display');
+    if (isNewRecord) {
+        recordDisplay.innerText = "🏆 NOVO RECORDE! (" + STATE.score + "m)";
+        recordDisplay.classList.add('new-record-anim');
+    } else {
+        recordDisplay.innerText = "Melhor Recorde: " + oldRecord + "m";
+        recordDisplay.classList.remove('new-record-anim');
+    }
+
     document.getElementById('game-over-screen').classList.remove('hidden');
     document.getElementById('ui-layer').classList.add('hidden');
 }
